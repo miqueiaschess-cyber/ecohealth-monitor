@@ -1,0 +1,9 @@
+{
+  "name": "EcoHealth Monitor",
+  "description": "Integrated platform for monitoring field technician health, safety, and fatigue using AI analysis.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

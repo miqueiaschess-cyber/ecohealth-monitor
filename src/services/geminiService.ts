@@ -2,20 +2,20 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { SurveyAnswers, AIAnalysisResult, RiskLevel, Language } from "../types";
 
 // -------------------------
-// GET API KEY - FUNCIONA LOCAL E NA VERCEL
+// GET API KEY - CORRIGIDO PARA USAR A CONVENÇÃO VITE
 // -------------------------
 const getApiKey = (): string => {
-  // Ambiente local (Vite)
-  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_KEY) {
-    return import.meta.env.VITE_API_KEY;
+  // Padronizamos para usar 'VITE_GEMINI_API_KEY' ou 'VITE_API_KEY'
+  // No Vercel, a chave PRECISA ser prefixada com VITE_
+  const apiKey = (import.meta.env?.VITE_GEMINI_API_KEY || import.meta.env?.VITE_API_KEY);
+  
+  if (!apiKey) {
+    // Log de erro útil, que pode aparecer nos logs de build/runtime do Vercel
+    console.error("ERRO: Variável de ambiente da Gemini API (VITE_GEMINI_API_KEY) não encontrada.");
   }
-
-  // Ambiente produção (Vercel)
-  if (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) {
-    return process.env.GEMINI_API_KEY;
-  }
-
-  return "";
+  
+  // Retorna a chave encontrada ou uma string vazia se não encontrar (para forçar o throw abaixo)
+  return apiKey || "";
 };
 
 // -------------------------
@@ -35,10 +35,13 @@ export const validateFace = async (
 ): Promise<{ isValid: boolean; message?: string }> => {
   try {
     const key = getApiKey();
-    if (!key) throw new Error("API Key not found.");
+    // Este erro será disparado se a chave não for encontrada
+    if (!key) throw new Error("API Key not found."); 
 
     const ai = new GoogleGenAI({ apiKey: key });
 
+    // ... (restante do código da função validateFace é o mesmo) ...
+    // Seu código original:
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: {
@@ -51,13 +54,13 @@ export const validateFace = async (
           },
           {
             text: `Strict Face Detection Task.
-            Analyze the image. Is there a REAL human face clearly visible and identifiable?
-            Reject:
-            - walls, objects, dark images
-            - partial faces
-            - photos of screens or printed photos
-            
-            Return JSON: { "isValid": boolean, "message": string }`
+              Analyze the image. Is there a REAL human face clearly visible and identifiable?
+              Reject:
+              - walls, objects, dark images
+              - partial faces
+              - photos of screens or printed photos
+              
+              Return JSON: { "isValid": boolean, "message": string }`
           },
         ],
       },
@@ -92,7 +95,8 @@ export const analyzeFatigue = async (
 ): Promise<AIAnalysisResult> => {
   try {
     const key = getApiKey();
-    if (!key) throw new Error("API Key not found.");
+    // Este erro será disparado se a chave não for encontrada
+    if (!key) throw new Error("API Key not found."); 
 
     const ai = new GoogleGenAI({ apiKey: key });
     const targetLang = langMap[lang];
@@ -106,6 +110,8 @@ export const analyzeFatigue = async (
       - Feeling Safe: ${survey.feelingSafe}/10
     `;
 
+    // ... (restante do código da função analyzeFatigue é o mesmo) ...
+    // Seu código original:
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: {

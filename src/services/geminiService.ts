@@ -2,23 +2,25 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { SurveyAnswers, AIAnalysisResult, RiskLevel, Language } from "../types";
 
 // -------------------------
-// GET API KEY (Vercel / Local / IDX)
+// GET API KEY - FUNCIONA LOCAL E NA VERCEL
 // -------------------------
-const getApiKey = () => {
-  // 1. Vercel → process.env
-  if (typeof process !== "undefined" && process.env.GEMINI_API_KEY) {
+const getApiKey = (): string => {
+  // Ambiente local (Vite)
+  if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_KEY) {
+    return import.meta.env.VITE_API_KEY;
+  }
+
+  // Ambiente produção (Vercel)
+  if (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) {
     return process.env.GEMINI_API_KEY;
   }
 
-  // 2. Vite local → import.meta.env
-  if (typeof import.meta !== "undefined" && import.meta.env?.GEMINI_API_KEY) {
-    return import.meta.env.GEMINI_API_KEY;
-  }
-
-  // 3. Fallback
   return "";
 };
 
+// -------------------------
+// MAPA DE LÍNGUAS
+// -------------------------
 const langMap = {
   en: "English",
   pt: "Portuguese (Português do Brasil)",
@@ -26,7 +28,7 @@ const langMap = {
 };
 
 // -------------------------
-// FACE VALIDATION
+// 1) VALIDAÇÃO DE ROSTO
 // -------------------------
 export const validateFace = async (
   imageBase64: string
@@ -49,9 +51,13 @@ export const validateFace = async (
           },
           {
             text: `Strict Face Detection Task.
-Analyze the image. Is there a REAL human face clearly visible and identifiable?
-
-Return JSON: { "isValid": boolean, "message": string }`
+            Analyze the image. Is there a REAL human face clearly visible and identifiable?
+            Reject:
+            - walls, objects, dark images
+            - partial faces
+            - photos of screens or printed photos
+            
+            Return JSON: { "isValid": boolean, "message": string }`
           },
         ],
       },
@@ -70,17 +76,14 @@ Return JSON: { "isValid": boolean, "message": string }`
 
     return JSON.parse(response.text || "{}");
 
-  } catch (err) {
-    console.error("Face Validation Error:", err);
-    return {
-      isValid: false,
-      message: "AI Connection Error. Check Key."
-    };
+  } catch (error) {
+    console.error("Face Validation Error:", error);
+    return { isValid: false, message: "AI Connection Error. Check Key." };
   }
 };
 
 // -------------------------
-// FATIGUE ANALYSIS
+// 2) ANÁLISE DE FADIGA
 // -------------------------
 export const analyzeFatigue = async (
   imageBase64: string,
@@ -95,13 +98,13 @@ export const analyzeFatigue = async (
     const targetLang = langMap[lang];
 
     const surveyContext = `
-User Self-Reported Metrics (20% Weight):
-- Sleep Quality: ${survey.sleepQuality}
-- Energy: ${survey.energyLevel}/10
-- Focus: ${survey.focusLevel}/10
-- Motivation: ${survey.motivationLevel}/10
-- Feeling Safe: ${survey.feelingSafe}/10
-`;
+      Technician Self-Reported Metrics (20% Weight):
+      - Sleep Quality: ${survey.sleepQuality}/5
+      - Energy: ${survey.energyLevel}/10
+      - Focus: ${survey.focusLevel}/10
+      - Motivation: ${survey.motivationLevel}/10
+      - Feeling Safe: ${survey.feelingSafe}/10
+    `;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -114,31 +117,46 @@ User Self-Reported Metrics (20% Weight):
             },
           },
           {
-            text: `Act as a biometric fatigue analyst.
+            text: `
+              You are a biometric fatigue analyst.
 
-Return JSON with:
-fatigueLevel, riskLevel, explanation, recommendation.
+              Reject immediately if:
+              - Mouth wide open
+              - Hands covering face
+              - Exaggerated expressions
+              - Tongue out
+              - Acting intentionally
 
-If face expression is exaggerated (yawn, tongue out, hands blocking),
-return { "riskLevel": "INVALID" }`
+              Scoring Rule:
+              FinalScore = (VisualFatigue * 0.8) + (SurveyScore * 0.2)
+
+              Visual signs:
+              - Droopy eyelids
+              - Dark circles
+              - Low muscle tone
+              - Glassy eyes
+
+              OVERRIDE:
+              If VisualFatigue > 70 → riskLevel = HIGH.
+
+              Output JSON in ${targetLang}:
+              { fatigueLevel, riskLevel, explanation, recommendation }
+            `
           }
         ]
       },
-
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
             fatigueLevel: { type: Type.NUMBER },
-            riskLevel: { type: Type.STRING, enum: [
-              RiskLevel.LOW,
-              RiskLevel.MODERATE,
-              RiskLevel.HIGH,
-              RiskLevel.INVALID
-            ]},
+            riskLevel: {
+              type: Type.STRING,
+              enum: [RiskLevel.LOW, RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.INVALID]
+            },
             explanation: { type: Type.STRING },
-            recommendation: { type: Type.STRING },
+            recommendation: { type: Type.STRING }
           },
           required: ["fatigueLevel", "riskLevel", "explanation", "recommendation"]
         }
@@ -147,13 +165,19 @@ return { "riskLevel": "INVALID" }`
 
     return JSON.parse(response.text || "{}");
 
-  } catch (err) {
-    console.error("Gemini Analysis Error:", err);
+  } catch (error) {
+    console.error("Gemini Analysis Error:", error);
     return {
       fatigueLevel: 0,
       riskLevel: RiskLevel.INVALID,
-      explanation: "AI Connection Error or Invalid API Key.",
-      recommendation: "Try again later."
+      explanation:
+        lang === "pt"
+          ? "Erro na conexão com IA ou chave inválida."
+          : "AI connection error.",
+      recommendation:
+        lang === "pt"
+          ? "Tente novamente mais tarde."
+          : "Try again later.",
     };
   }
 };
